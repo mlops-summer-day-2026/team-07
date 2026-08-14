@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Тест collectNews</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #f4f4f4;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 16px;
+    }
+    label {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 20px;
+      padding: 14px;
+      border: 2px solid #555;
+      border-radius: 10px;
+      background: #1c1c1c;
+      color: #fff;
+    }
+    button {
+      width: 100%;
+      margin-top: 14px;
+      font-size: 22px;
+      font-weight: 700;
+      padding: 18px;
+      border: 0;
+      border-radius: 12px;
+      background: #f5c518;
+      color: #111;
+    }
+    button:disabled {
+      opacity: 0.6;
+    }
+    .stats {
+      margin-top: 16px;
+      font-size: 18px;
+      line-height: 1.4;
+    }
+    pre {
+      margin-top: 12px;
+      padding: 12px;
+      background: #1c1c1c;
+      border-radius: 10px;
+      overflow: auto;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <h1>Тест сбора новостей</h1>
+  <label for="keywords">Ключевые слова (через запятую, можно пусто)</label>
+  <input id="keywords" type="text" placeholder="нефть, цб">
+  <button id="run" type="button">Собрать новости</button>
+  <div class="stats" id="stats">Нажмите кнопку. Открывайте через http, не file://</div>
+  <pre id="out"></pre>
+
+  <script src="news.js"></script>
+  <script>
+    var run = document.getElementById("run");
+    var stats = document.getElementById("stats");
+    var out = document.getElementById("out");
+
+    run.addEventListener("click", function () {
+      var raw = document.getElementById("keywords").value;
+      var keywords = raw.split(/[,;]+/).map(function (k) { return k.trim(); }).filter(Boolean);
+
+      run.disabled = true;
+      stats.textContent = "Собираю… это может занять 10–20 секунд";
+      out.textContent = "";
+
+      collectNews({ keywords: keywords, maxItems: 25 })
+        .then(function (data) {
+          stats.textContent = "Собрано: " + data.length;
+          out.textContent = JSON.stringify(data, null, 2);
+        })
+        .catch(function (err) {
+          stats.textContent = "Сбой: " + (err && err.message ? err.message : err);
+        })
+        .then(function () {
+          run.disabled = false;
+        });
+    });
+  </script>
+</body>
+</html>
