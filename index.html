@@ -1,1 +1,166 @@
-hello
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Тест collectNews</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #f4f4f4;
+      padding: 16px;
+    }
+    h1, h2 {
+      margin: 0 0 16px;
+    }
+    h1 { font-size: 28px; }
+    h2 { font-size: 24px; margin-top: 28px; }
+    label {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 20px;
+      padding: 14px;
+      border: 2px solid #555;
+      border-radius: 10px;
+      background: #1c1c1c;
+      color: #fff;
+    }
+    button {
+      width: 100%;
+      margin-top: 14px;
+      font-size: 22px;
+      font-weight: 700;
+      padding: 18px;
+      border: 0;
+      border-radius: 12px;
+      background: #f5c518;
+      color: #111;
+    }
+    button:disabled {
+      opacity: 0.6;
+    }
+    .stats {
+      margin-top: 16px;
+      font-size: 18px;
+      line-height: 1.4;
+    }
+    pre {
+      margin-top: 12px;
+      padding: 12px;
+      background: #1c1c1c;
+      border-radius: 10px;
+      overflow: auto;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #llm {
+      margin-top: 8px;
+      font-size: 20px;
+      line-height: 1.45;
+    }
+    #llm h3 {
+      margin: 18px 0 10px;
+      font-size: 22px;
+    }
+    #llm ul {
+      margin: 0;
+      padding-left: 22px;
+    }
+    #llm li {
+      margin-bottom: 12px;
+    }
+    #llm a {
+      color: #f5c518;
+    }
+    #llm .why {
+      display: block;
+      font-size: 16px;
+      color: #ccc;
+    }
+    #llm .error {
+      color: #ff8a8a;
+    }
+  </style>
+</head>
+<body>
+  <h1>Тест сбора новостей</h1>
+  <label for="keywords">Ключевые слова (через запятую, можно пусто)</label>
+  <input id="keywords" type="text" placeholder="нефть, цб">
+  <button id="run" type="button">Собрать новости</button>
+  <div class="stats" id="stats">Сервер: python3 serve.py → http://localhost:8080/news/test_news.html</div>
+  <pre id="out"></pre>
+
+  <h2>Сводка LLM</h2>
+  <div id="llm">После сбора здесь появится важное и остальное</div>
+
+  <script src="../llm/constants.js"></script>
+  <script src="../llm/llm.js"></script>
+  <script src="news.js"></script>
+  <script>
+    var run = document.getElementById("run");
+    var stats = document.getElementById("stats");
+    var out = document.getElementById("out");
+    var llmBox = document.getElementById("llm");
+
+    function linkItem(item) {
+      var title = item.title || "без названия";
+      if (!item.url) return title;
+      return '<a href="' + item.url + '" target="_blank" rel="noopener">' + title + "</a>";
+    }
+
+    function renderList(items, withWhy) {
+      if (!items || !items.length) return "<p>пусто</p>";
+      return "<ul>" + items.map(function (item) {
+        var why = withWhy && item.why ? '<span class="why">' + item.why + "</span>" : "";
+        return "<li>" + linkItem(item) + why + "</li>";
+      }).join("") + "</ul>";
+    }
+
+    function renderLlm(data) {
+      llmBox.innerHTML =
+        "<h3>Важное</h3>" + renderList(data.important, true) +
+        "<h3>Не очень</h3>" + renderList(data.other, false);
+    }
+
+    run.addEventListener("click", function () {
+      var raw = document.getElementById("keywords").value;
+      var keywords = raw.split(/[,;]+/).map(function (k) { return k.trim(); }).filter(Boolean);
+
+      run.disabled = true;
+      stats.textContent = "Собираю… это может занять 10–20 секунд";
+      out.textContent = "";
+      llmBox.textContent = "";
+
+      collectNews({ keywords: keywords, maxItems: 25 })
+        .then(function (data) {
+          stats.textContent = "Собрано: " + data.length;
+          out.textContent = JSON.stringify(data, null, 2);
+          llmBox.textContent = "Суммирую…";
+          return summarizeNews(data);
+        })
+        .then(function (summary) {
+          renderLlm(summary);
+        })
+        .catch(function (err) {
+          var msg = err && err.message ? err.message : String(err);
+          if (!out.textContent) stats.textContent = "Сбой: " + msg;
+          llmBox.innerHTML = '<p class="error">' + msg + "</p>";
+        })
+        .then(function () {
+          run.disabled = false;
+        });
+    });
+  </script>
+</body>
+</html>

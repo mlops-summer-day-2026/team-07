@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+llm/constants.js
 
 # Пасхалка с карты — держим локально, репозиторий публичный
 SECRET.md
