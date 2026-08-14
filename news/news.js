@@ -2,27 +2,18 @@
   "use strict";
 
   var TIMEZONE = "Europe/Moscow";
-  var FETCH_TIMEOUT_MS = 8000;
+  var FETCH_TIMEOUT_MS = 12000;
   var CONCURRENCY = 2;
   var SLOT_PAUSE_MS = 350;
 
   var DEFAULT_SOURCES = [
-    // { name: "Lenta.ru", url: "https://lenta.ru/rss" },
+    { name: "Lenta.ru", url: "https://lenta.ru/rss" },
     { name: "РИА Новости", url: "https://ria.ru/export/rss2/archive/index.xml" },
-    // { name: "ТАСС", url: "https://tass.ru/rss/v2.xml" },
+    { name: "ТАСС", url: "https://tass.ru/rss/v2.xml" },
     { name: "РБК", url: "https://rssexport.rbc.ru/rbcnews/news/30/full.rss" },
-    // { name: "Интерфакс", url: "https://www.interfax.ru/rss.asp" },
-    // { name: "Коммерсантъ", url: "https://www.kommersant.ru/RSS/news.xml" },
-    // { name: "Газета.ру", url: "https://www.gazeta.ru/export/rss/first.xml" },
-  ];
-
-  var CORS_PROXIES = [
-    function (url) {
-      return "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-    },
-    function (url) {
-      return "https://corsproxy.io/?" + encodeURIComponent(url);
-    },
+    { name: "Интерфакс", url: "https://www.interfax.ru/rss.asp" },
+    { name: "Коммерсантъ", url: "https://www.kommersant.ru/RSS/news.xml" },
+    { name: "Газета.ру", url: "https://www.gazeta.ru/export/rss/first.xml" },
   ];
 
   function sleep(ms) {
@@ -121,22 +112,13 @@
     });
   }
 
-  function isProxyFailure(err) {
-    var msg = (err && err.message ? err.message : String(err)).toLowerCase();
-    if (/403|429/.test(msg)) return false;
-    return /failed to fetch|network|proxy|502|503|504|timeout|abort/.test(msg);
-  }
-
   function fetchWithTimeout(url) {
     var controller = new AbortController();
     var timer = setTimeout(function () {
       controller.abort();
     }, FETCH_TIMEOUT_MS);
 
-    return fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: "application/rss+xml, application/xml, text/xml, */*" },
-    })
+    return fetch(url, { signal: controller.signal })
       .then(function (res) {
         if (!res.ok) {
           var err = new Error("HTTP " + res.status);
@@ -150,26 +132,57 @@
       });
   }
 
-  function fetchRssText(rssUrl) {
-    return fetchWithTimeout(rssUrl).catch(function (directErr) {
-      if (directErr && (directErr.status === 403 || directErr.status === 429)) {
-        throw directErr;
-      }
+  function decodeAllOrigins(jsonText) {
+    var data = JSON.parse(jsonText);
+    var contents = data.contents || "";
+    if (contents.indexOf("data:") === 0) {
+      var b64 = contents.split(",")[1] || "";
+      var bin = atob(b64);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder("utf-8").decode(bytes);
+    }
+    return contents;
+  }
 
-      var chain = Promise.reject(directErr);
-      CORS_PROXIES.forEach(function (toProxy) {
-        chain = chain.catch(function (prev) {
-          if (prev && (prev.status === 403 || prev.status === 429)) throw prev;
-          return fetchWithTimeout(toProxy(rssUrl)).catch(function (proxyErr) {
-            if (!isProxyFailure(proxyErr)) throw proxyErr;
-            return fetchWithTimeout(toProxy(rssUrl)).catch(function () {
-              throw proxyErr;
-            });
-          });
-        });
+  function itemsFromRss2Json(data) {
+    if (!data || data.status !== "ok" || !Array.isArray(data.items)) {
+      throw new Error((data && data.message) || "rss2json");
+    }
+    return data.items
+      .map(function (it) {
+        var published = parseDate(it.pubDate);
+        return {
+          title: it.title || "",
+          url: (it.link || "").trim(),
+          time: published ? moscowTimeString(published) : "",
+          _publishedMs: published ? published.getTime() : 0,
+          _date: published ? moscowDateString(published) : "",
+        };
+      })
+      .filter(function (it) {
+        return it.title || it.url;
       });
-      return chain;
-    });
+  }
+
+  function fetchSourceItems(rssUrl) {
+    var rss2 =
+      "https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent(rssUrl);
+    var allorigins =
+      "https://api.allorigins.win/get?url=" + encodeURIComponent(rssUrl);
+
+    return fetchWithTimeout(rss2)
+      .then(function (text) {
+        return itemsFromRss2Json(JSON.parse(text));
+      })
+      .catch(function () {
+        return fetchWithTimeout(allorigins)
+          .then(decodeAllOrigins)
+          .then(parseRssItems);
+      })
+      .catch(function () {
+        return fetchWithTimeout(rssUrl).then(parseRssItems);
+      });
   }
 
   function parseRssItems(xmlText) {
@@ -281,9 +294,7 @@
 
     var tasks = sources.map(function (source) {
       return function () {
-        return fetchRssText(source.url).then(function (xml) {
-          return parseRssItems(xml);
-        });
+        return fetchSourceItems(source.url);
       };
     });
 
