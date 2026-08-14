@@ -40,18 +40,9 @@
     };
   }
 
-  function isLocalHost() {
-    var host = global.location && global.location.hostname;
-    return host === "localhost" || host === "127.0.0.1";
-  }
-
   function openRouterUrls() {
     var direct = "https://openrouter.ai/api/v1/chat/completions";
-    var urls = [];
-    if (isLocalHost()) urls.push("/api/openrouter");
-    urls.push(direct);
-    urls.push("https://corsproxy.io/?" + encodeURIComponent(direct));
-    return urls;
+    return [direct, "https://corsproxy.io/?" + encodeURIComponent(direct)];
   }
 
   function postOpenRouter(url, payload) {
