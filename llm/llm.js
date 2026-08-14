@@ -23,7 +23,7 @@
   }
 
   function getKey() {
-    var key = global.OPENROUTER_API_KEY;
+    var key = global.OPENROUTER_API_KEY && String(global.OPENROUTER_API_KEY).trim();
     if (!key) throw new Error("Нет OPENROUTER_API_KEY в llm/constants.js");
     return key;
   }
